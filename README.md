@@ -9,6 +9,8 @@ Version-controlled source for a local-first Letterboxd recommender. Personal exp
 3. `scripts/taste_pipeline.py enrich` adds TMDB metadata locally. It reads `TMDB_READ_ACCESS_TOKEN` or `TMDB_API_KEY` from the environment; neither belongs in Git.
 4. `build-profile` derives explainable affinities from directors, genres, countries, eras, keywords, and curated film movements. `recommend` combines those affinities with the user's watchlist and trusted-friend support.
 
+Ratings are the primary taste signal. An explicit like has a strong fixed weight, watched films provide only faint exposure context, and watchlists are a lighter curiosity signal. Enrichment runs are recorded locally so interrupted batches resume from the remaining films.
+
 ## Local usage
 
 ```powershell

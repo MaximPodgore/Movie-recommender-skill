@@ -32,6 +32,7 @@ def db() -> sqlite3.Connection:
     CREATE TABLE IF NOT EXISTS film_metadata (film_key TEXT PRIMARY KEY, tmdb_id INTEGER, match_confidence REAL, payload_json TEXT NOT NULL, enriched_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS film_features (film_key TEXT NOT NULL, feature_type TEXT NOT NULL, feature_value TEXT NOT NULL, source TEXT NOT NULL, PRIMARY KEY(film_key, feature_type, feature_value));
     CREATE TABLE IF NOT EXISTS taste_profiles (person TEXT PRIMARY KEY, profile_json TEXT NOT NULL, built_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS enrichment_runs (run_id INTEGER PRIMARY KEY, person TEXT NOT NULL, requested_limit INTEGER NOT NULL, title_filter TEXT, enriched_count INTEGER NOT NULL DEFAULT 0, unmatched_count INTEGER NOT NULL DEFAULT 0, started_at TEXT NOT NULL, completed_at TEXT);
     """)
     return con
 
@@ -77,6 +78,7 @@ def movement_features(payload: dict, directors: list[str]) -> list[str]:
 
 def enrich(args: argparse.Namespace) -> None:
     con = db(); migrate_legacy(con)
+    run_id = con.execute("INSERT INTO enrichment_runs(person,requested_limit,title_filter,started_at) VALUES (?,?,?,?)", (args.person, args.limit, args.title, now())).lastrowid
     rows = con.execute("""
         SELECT f.film_key,f.title,f.year
         FROM films f JOIN taste_events e USING(film_key)
@@ -98,18 +100,18 @@ def enrich(args: argparse.Namespace) -> None:
         features = [("director", d) for d in directors] + [("genre", g["name"]) for g in payload.get("genres", [])] + [("country", c["iso_3166_1"]) for c in payload.get("production_countries", [])] + [("keyword", k["name"]) for k in payload.get("keywords", {}).get("keywords", [])] + [("era", f"{int(payload.get('release_date','0000')[:4] or 0)//10*10}s")] + [("movement", m) for m in movement_features(payload, directors)]
         con.execute("INSERT OR REPLACE INTO film_metadata VALUES (?,?,?,?,?)", (row["film_key"], candidate["id"], 1.0 if clean(payload.get("title")).lower() == row["title"].lower() else .7, json.dumps(payload), now())); con.execute("DELETE FROM film_features WHERE film_key=?", (row["film_key"],))
         con.executemany("INSERT OR IGNORE INTO film_features VALUES (?,?,?, 'tmdb')", [(row["film_key"], t, v) for t,v in features if v]); con.commit(); count += 1; time.sleep(.25)
-    con.close(); print(json.dumps({"enriched": count, "unmatched": unmatched, "batch_limit": args.limit}))
+    con.execute("UPDATE enrichment_runs SET enriched_count=?,unmatched_count=?,completed_at=? WHERE run_id=?", (count, unmatched, now(), run_id)); con.commit(); con.close(); print(json.dumps({"enriched": count, "unmatched": unmatched, "batch_limit": args.limit, "run_id": run_id}))
 
 def build_profile(args: argparse.Namespace) -> None:
     con = db(); migrate_legacy(con); weights, evidence = defaultdict(float), defaultdict(int)
     rows = con.execute("SELECT e.kind,e.rating,ff.feature_type,ff.feature_value FROM taste_events e JOIN film_features ff USING(film_key) WHERE e.person=?", (args.person,))
     for row in rows:
-        weight = (float(row["rating"]) - 2.5) if row["kind"] == "rated" and row["rating"] is not None else (1.5 if row["kind"] == "liked" else (.35 if row["kind"] == "watchlist" else 0))
+        weight = (float(row["rating"]) - 2.5) if row["kind"] == "rated" and row["rating"] is not None else (1.5 if row["kind"] == "liked" else (.08 if row["kind"] == "watchlist" else (.04 if row["kind"] == "watched" else 0)))
         weights[(row["feature_type"], row["feature_value"])] += weight; evidence[(row["feature_type"], row["feature_value"])] += 1
     positive = sorted(({"type":t,"value":v,"weight":round(w,2),"films":evidence[(t,v)]} for (t,v),w in weights.items() if w > 0), key=lambda x:(-x["weight"],-x["films"]))[:40]
     negative = sorted(({"type":t,"value":v,"weight":round(w,2),"films":evidence[(t,v)]} for (t,v),w in weights.items() if w < 0), key=lambda x:x["weight"])[:25]
     movements = [x["value"] for x in positive if x["type"] == "movement"]; adjacent = sorted({item for movement in movements for item in ADJACENCIES.get(movement, [])})
-    profile = {"person":args.person,"method":"structured metadata affinity; not embedding similarity","top_affinities":positive,"negative_affinities":negative,"adjacent_unexplored_buckets":adjacent,"metadata_coverage":con.execute("SELECT count(*) FROM film_metadata").fetchone()[0]}
+    profile = {"person":args.person,"method":"structured metadata affinity; not embedding similarity","signal_weights":{"rated":"rating minus 2.5 (primary)","liked":1.5,"watchlist":0.08,"watched":0.04},"top_affinities":positive,"negative_affinities":negative,"adjacent_unexplored_buckets":adjacent,"metadata_coverage":con.execute("SELECT count(*) FROM film_metadata").fetchone()[0]}
     con.execute("INSERT OR REPLACE INTO taste_profiles VALUES (?,?,?)", (args.person,json.dumps(profile),now())); con.commit(); con.close(); print(json.dumps(profile,indent=2))
 
 def recommend(args: argparse.Namespace) -> None:
