@@ -1,0 +1,75 @@
+[
+  {
+    "id": "bfi-instant-film-school",
+    "tier": 2,
+    "institution": "British Film Institute",
+    "title": "Instant Film School",
+    "url": "https://player.bfi.org.uk/subscription/collection/instant-film-school",
+    "coverage": ["German Expressionism", "Soviet Montage", "Italian Neorealism", "New German Cinema", "US independent cinema", "modernism", "postmodernism"],
+    "use": "movement primers and path design",
+    "collection_mode": "public page; record only title, film membership, source attribution, and an original note"
+  },
+  {
+    "id": "bfi-french-new-wave",
+    "tier": 2,
+    "institution": "British Film Institute",
+    "title": "10 great French New Wave films",
+    "url": "https://www.bfi.org.uk/lists/10-great-french-new-wave-films",
+    "coverage": ["French New Wave", "Left Bank", "Cahiers du Cinema"],
+    "use": "entry and deepening sequence"
+  },
+  {
+    "id": "bfi-japanese-new-wave",
+    "tier": 2,
+    "institution": "British Film Institute",
+    "title": "Where to begin with the Japanese New Wave",
+    "url": "https://www.bfi.org.uk/features/where-begin-japanese-new-wave",
+    "coverage": ["Japanese New Wave", "political modernism", "Japanese studio and independent cinema"],
+    "use": "adjacent-movement bridge"
+  },
+  {
+    "id": "bfi-italian-neorealism",
+    "tier": 2,
+    "institution": "British Film Institute",
+    "title": "10 great Italian neorealist films",
+    "url": "https://www.bfi.org.uk/lists/10-great-italian-neorealist-films",
+    "coverage": ["Italian Neorealism", "postwar realism", "global influence"],
+    "use": "movement canon and influence graph"
+  },
+  {
+    "id": "criterion-collections",
+    "tier": 3,
+    "institution": "The Criterion Collection",
+    "title": "Editorial collections and director box sets",
+    "url": "https://www.criterion.com/",
+    "coverage": ["auteur studies", "national cinemas", "Black independent cinema", "art cinema"],
+    "use": "focused deep dives; retain explicit collection membership"
+  },
+  {
+    "id": "screensite-syllabi",
+    "tier": 1,
+    "institution": "ScreenSite",
+    "title": "Syllabi Listings",
+    "url": "https://www.screensite.org/data/data_syllabi.php",
+    "coverage": ["film studies syllabi", "authorship", "melodrama", "historical course design"],
+    "use": "discover public academic syllabi; validate each source page before importing"
+  },
+  {
+    "id": "open-syllabus",
+    "tier": 1,
+    "institution": "Open Syllabus",
+    "title": "Open Syllabus Dataset",
+    "url": "https://docs.opensyllabus.org/",
+    "coverage": ["cross-institutional curricular co-assignment"],
+    "use": "future aggregate evidence, subject to its access terms and film-title matching limits"
+  },
+  {
+    "id": "wikidata-film-movement",
+    "tier": 4,
+    "institution": "Wikidata",
+    "title": "Movement property (P135)",
+    "url": "https://www.wikidata.org/wiki/Wikidata:SPARQL_query_service/queries/examples",
+    "coverage": ["film-to-movement candidate associations"],
+    "use": "candidate expansion and metadata reconciliation only"
+  }
+]

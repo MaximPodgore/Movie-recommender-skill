@@ -21,6 +21,8 @@ py scripts/taste_pipeline.py recommend --limit 12
 
 The local database defaults to `%LOCALAPPDATA%\\Codex\\letterboxd-recommender\\taste.sqlite`.
 
+For professor-like discovery paths, see [the curatorial corpus](references/curatorial-corpus.md). It records accountable film-studies sources and keeps source membership distinct from generic metadata.
+
 ## Boundaries
 
 Collection is public-only and low-rate. It does not authenticate with Letterboxd or collect private data. The repository intentionally contains no user data, tokens, database files, or scraped snapshots.

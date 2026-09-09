@@ -5,6 +5,7 @@
 !package.json
 !package-lock.json
 !tsconfig.json
+!curriculum/source_registry.json
 __pycache__/
 *.py[cod]
 
