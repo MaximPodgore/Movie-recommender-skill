@@ -121,6 +121,7 @@ def recommend(args: argparse.Namespace) -> None:
     profile = json.loads(profile_row[0]) if profile_row else {}
     affinities = {(x["type"], x["value"]): x["weight"] for x in profile.get("top_affinities", [])}
     dislikes = {(x["type"], x["value"]): x["weight"] for x in profile.get("negative_affinities", [])}
+    feature_scale = {"movement": .06, "director": .04, "keyword": .03, "genre": .012, "era": .006, "country": .002}
     candidates = defaultdict(lambda: {"score": 0.0, "reasons": [], "friends": set()})
     def add(key, points, reason, friend=None):
         if key in watched: return
@@ -137,8 +138,11 @@ def recommend(args: argparse.Namespace) -> None:
         for feature in con.execute("SELECT feature_type,feature_value FROM film_features WHERE film_key=?", (key,)):
             affinity = affinities.get((feature["feature_type"], feature["feature_value"]), 0)
             dislike = dislikes.get((feature["feature_type"], feature["feature_value"]), 0)
-            if affinity: item["score"] += min(1.5, affinity * .08); item["reasons"].append(f"matches your {feature['feature_value']} affinity")
-            if dislike: item["score"] += max(-1.5, dislike * .08)
+            scale = feature_scale.get(feature["feature_type"], .01)
+            if affinity:
+                contribution = min(1.5, affinity * scale); item["score"] += contribution
+                if contribution >= .4: item["reasons"].append(f"matches your {feature['feature_value']} affinity")
+            if dislike: item["score"] += max(-1.0, dislike * scale)
     output = []
     for key, item in candidates.items():
         film = con.execute("SELECT title,year FROM films WHERE film_key=?", (key,)).fetchone()
