@@ -86,17 +86,19 @@ def enrich(args: argparse.Namespace) -> None:
         ORDER BY MAX(CASE WHEN e.kind='rated' THEN ABS(e.rating-2.5) ELSE 0 END) DESC,
                  MAX(CASE WHEN e.kind='watchlist' THEN 1 ELSE 0 END) DESC
         LIMIT ?
-    """, (args.person, args.limit)).fetchall(); count = 0
+    """, (args.person, args.limit)).fetchall(); count = unmatched = 0
     for row in rows:
         search_params = {"query": row["title"], "include_adult": "false"}
         if row["year"]: search_params["year"] = row["year"]
         search = tmdb_request("/search/movie", search_params); results = search.get("results", [])
-        if not results: continue
+        if not results:
+            con.execute("INSERT OR REPLACE INTO film_metadata VALUES (?,?,?,?,?)", (row["film_key"], None, 0.0, json.dumps({"unmatched": True}), now()))
+            con.commit(); unmatched += 1; continue
         candidate = results[0]; payload = tmdb_request(f"/movie/{candidate['id']}", {"append_to_response": "credits,keywords,external_ids"}); directors = [c["name"] for c in payload.get("credits", {}).get("crew", []) if c.get("job") == "Director"]
         features = [("director", d) for d in directors] + [("genre", g["name"]) for g in payload.get("genres", [])] + [("country", c["iso_3166_1"]) for c in payload.get("production_countries", [])] + [("keyword", k["name"]) for k in payload.get("keywords", {}).get("keywords", [])] + [("era", f"{int(payload.get('release_date','0000')[:4] or 0)//10*10}s")] + [("movement", m) for m in movement_features(payload, directors)]
         con.execute("INSERT OR REPLACE INTO film_metadata VALUES (?,?,?,?,?)", (row["film_key"], candidate["id"], 1.0 if clean(payload.get("title")).lower() == row["title"].lower() else .7, json.dumps(payload), now())); con.execute("DELETE FROM film_features WHERE film_key=?", (row["film_key"],))
         con.executemany("INSERT OR IGNORE INTO film_features VALUES (?,?,?, 'tmdb')", [(row["film_key"], t, v) for t,v in features if v]); con.commit(); count += 1; time.sleep(.25)
-    con.close(); print(json.dumps({"enriched": count, "remaining_batch_limit": args.limit}))
+    con.close(); print(json.dumps({"enriched": count, "unmatched": unmatched, "batch_limit": args.limit}))
 
 def build_profile(args: argparse.Namespace) -> None:
     con = db(); migrate_legacy(con); weights, evidence = defaultdict(float), defaultdict(int)
