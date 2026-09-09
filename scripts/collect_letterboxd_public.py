@@ -29,22 +29,34 @@ def parse_cards(html: str) -> list[dict]:
         rows.append({"title": display[:year_match.start()].strip() if year_match else display, "year": year_match.group(1) if year_match else "", "rating": int(rating_match.group(1)) / 2 if rating_match else None})
     return rows
 
-def collect(username: str, collection: str, max_pages: int) -> tuple[list[dict], dict]:
-    first = fetch(username, collection, 1)
-    available = max([int(n) for n in re.findall(rf'/{re.escape(username)}/{collection}/page/(\d+)/', first)] or [1])
-    target = min(available, max_pages); rows = parse_cards(first)
-    for page in range(2, target + 1):
-        time.sleep(1); rows.extend(parse_cards(fetch(username, collection, page)))
-    return rows, {"available_pages": available, "collected_pages": target, "complete": target == available}
+def collect(username: str, collection: str, max_pages: int, previous: dict | None = None) -> tuple[list[dict], dict]:
+    previous = previous or {}; pages = {int(p) for p in previous.get("pages_collected", [])}
+    available = int(previous.get("available_pages", 0) or 0)
+    if not available:
+        first = fetch(username, collection, 1); pages.add(1); rows = parse_cards(first)
+        available = max([int(n) for n in re.findall(rf'/{re.escape(username)}/{collection}/page/(\d+)/', first)] or [1])
+    else:
+        rows = []
+    pending = [page for page in range(1, available + 1) if page not in pages][:max_pages]
+    for page in pending:
+        if page == 1 and rows: continue
+        if rows: time.sleep(1)
+        rows.extend(parse_cards(fetch(username, collection, page))); pages.add(page)
+    return rows, {"available_pages": available, "pages_collected": sorted(pages), "collected_pages": len(pages), "complete": len(pages) == available}
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__); parser.add_argument("--username", required=True); parser.add_argument("--output", required=True); parser.add_argument("--max-pages", type=int, default=20)
+    parser = argparse.ArgumentParser(description=__doc__); parser.add_argument("--username", required=True); parser.add_argument("--output", required=True); parser.add_argument("--max-pages", type=int, default=20); parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
     if args.max_pages < 1: raise SystemExit("--max-pages must be positive.")
-    ratings, ratings_status = collect(args.username, "films", args.max_pages)
-    watchlist, watchlist_status = collect(args.username, "watchlist", args.max_pages)
-    snapshot = {"schema": 1, "username": args.username.lower(), "collected_at": datetime.now(timezone.utc).isoformat(), "ratings": ratings, "watchlist": watchlist, "coverage": {"ratings": ratings_status, "watchlist": watchlist_status}}
-    destination = Path(args.output); destination.parent.mkdir(parents=True, exist_ok=True); destination.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+    destination = Path(args.output); existing = json.loads(destination.read_text(encoding="utf-8")) if args.resume and destination.exists() else {}
+    if existing and existing.get("username", "").lower() != args.username.lower(): raise SystemExit("Resume snapshot username does not match --username.")
+    ratings, ratings_status = collect(args.username, "films", args.max_pages, existing.get("coverage", {}).get("ratings"))
+    watchlist, watchlist_status = collect(args.username, "watchlist", args.max_pages, existing.get("coverage", {}).get("watchlist"))
+    def merge(old, new):
+        merged = {(row["title"], row.get("year", "")): row for row in old}
+        merged.update({(row["title"], row.get("year", "")): row for row in new}); return list(merged.values())
+    snapshot = {"schema": 2, "username": args.username.lower(), "collected_at": datetime.now(timezone.utc).isoformat(), "ratings": merge(existing.get("ratings", []), ratings), "watchlist": merge(existing.get("watchlist", []), watchlist), "coverage": {"ratings": ratings_status, "watchlist": watchlist_status}}
+    destination.parent.mkdir(parents=True, exist_ok=True); destination.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"output": str(destination), "ratings": len(ratings), "watchlist": len(watchlist), "coverage": snapshot["coverage"]}, indent=2))
 
 if __name__ == "__main__": main()
