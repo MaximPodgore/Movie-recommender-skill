@@ -1,0 +1,14 @@
+# Local recommendation memory and collected user data
+*.sqlite
+*.sqlite-*
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+__pycache__/
+*.py[cod]
+
+# Secrets and local configuration
+.env
+.env.*
+secrets/
