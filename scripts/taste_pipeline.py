@@ -81,12 +81,12 @@ def enrich(args: argparse.Namespace) -> None:
         SELECT f.film_key,f.title,f.year
         FROM films f JOIN taste_events e USING(film_key)
         LEFT JOIN film_metadata m USING(film_key)
-        WHERE m.film_key IS NULL AND e.person=?
+        WHERE m.film_key IS NULL AND e.person=? AND (? IS NULL OR lower(f.title)=lower(?))
         GROUP BY f.film_key
-        ORDER BY MAX(CASE WHEN e.kind='rated' THEN ABS(e.rating-2.5) ELSE 0 END) DESC,
+        ORDER BY MAX(CASE WHEN e.kind='rated' THEN ABS(e.rating-2.5) WHEN e.kind='liked' THEN 1.5 ELSE 0 END) DESC,
                  MAX(CASE WHEN e.kind='watchlist' THEN 1 ELSE 0 END) DESC
         LIMIT ?
-    """, (args.person, args.limit)).fetchall(); count = unmatched = 0
+    """, (args.person, args.title, args.title, args.limit)).fetchall(); count = unmatched = 0
     for row in rows:
         search_params = {"query": row["title"], "include_adult": "false"}
         if row["year"]: search_params["year"] = row["year"]
@@ -104,7 +104,7 @@ def build_profile(args: argparse.Namespace) -> None:
     con = db(); migrate_legacy(con); weights, evidence = defaultdict(float), defaultdict(int)
     rows = con.execute("SELECT e.kind,e.rating,ff.feature_type,ff.feature_value FROM taste_events e JOIN film_features ff USING(film_key) WHERE e.person=?", (args.person,))
     for row in rows:
-        weight = (float(row["rating"]) - 2.5) if row["kind"] == "rated" and row["rating"] is not None else (.35 if row["kind"] == "watchlist" else 0)
+        weight = (float(row["rating"]) - 2.5) if row["kind"] == "rated" and row["rating"] is not None else (1.5 if row["kind"] == "liked" else (.35 if row["kind"] == "watchlist" else 0))
         weights[(row["feature_type"], row["feature_value"])] += weight; evidence[(row["feature_type"], row["feature_value"])] += 1
     positive = sorted(({"type":t,"value":v,"weight":round(w,2),"films":evidence[(t,v)]} for (t,v),w in weights.items() if w > 0), key=lambda x:(-x["weight"],-x["films"]))[:40]
     negative = sorted(({"type":t,"value":v,"weight":round(w,2),"films":evidence[(t,v)]} for (t,v),w in weights.items() if w < 0), key=lambda x:x["weight"])[:25]
@@ -115,7 +115,7 @@ def build_profile(args: argparse.Namespace) -> None:
 def recommend(args: argparse.Namespace) -> None:
     """Rank trusted-friend and personal-watchlist candidates, then add metadata affinity."""
     con = db(); migrate_legacy(con)
-    watched = {r[0] for r in con.execute("SELECT DISTINCT film_key FROM taste_events WHERE person='you' AND kind IN ('watched','rated')")}
+    watched = {r[0] for r in con.execute("SELECT DISTINCT film_key FROM taste_events WHERE person='you' AND kind IN ('watched','rated','liked')")}
     trusted = {r[0] for r in con.execute("SELECT name FROM friends")}
     profile_row = con.execute("SELECT profile_json FROM taste_profiles WHERE person='you'").fetchone()
     profile = json.loads(profile_row[0]) if profile_row else {}
@@ -146,11 +146,17 @@ def recommend(args: argparse.Namespace) -> None:
     con.close(); output.sort(key=lambda x: (-x["score"], x["title"]))
     print(json.dumps({"recommendations": output[:args.limit], "metadata_note": "Metadata affinity is active after TMDB enrichment; otherwise this is evidence-based friend/watchlist ranking."}, indent=2))
 
+def record_liked(args: argparse.Namespace) -> None:
+    con = db(); migrate_legacy(con); key = ensure_film(con, args.title, args.year)
+    con.execute("INSERT OR REPLACE INTO taste_events(person,film_key,kind,source_key,occurred_at) VALUES ('you',?,'liked','manual:conversation',?)", (key, now()))
+    con.commit(); con.close(); print(json.dumps({"recorded": "liked", "title": args.title, "year": args.year}))
+
 def main() -> None:
     parser=argparse.ArgumentParser(description=__doc__); subs=parser.add_subparsers(required=True)
     p=subs.add_parser("import-snapshot"); p.add_argument("--snapshot",required=True); p.add_argument("--person",required=True); p.set_defaults(func=import_snapshot)
-    p=subs.add_parser("enrich"); p.add_argument("--limit",type=int,default=100); p.add_argument("--person",default="you"); p.set_defaults(func=enrich)
+    p=subs.add_parser("enrich"); p.add_argument("--limit",type=int,default=100); p.add_argument("--person",default="you"); p.add_argument("--title"); p.set_defaults(func=enrich)
     p=subs.add_parser("build-profile"); p.add_argument("--person",default="you"); p.set_defaults(func=build_profile)
     p=subs.add_parser("recommend"); p.add_argument("--limit",type=int,default=12); p.set_defaults(func=recommend)
+    p=subs.add_parser("record-liked"); p.add_argument("--title",required=True); p.add_argument("--year",required=True); p.set_defaults(func=record_liked)
     args=parser.parse_args(); args.func(args)
 if __name__ == "__main__": main()

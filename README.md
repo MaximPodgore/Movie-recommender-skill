@@ -17,6 +17,7 @@ py scripts/taste_pipeline.py import-snapshot --person "Example Friend" --snapsho
 py scripts/taste_pipeline.py enrich --person you --limit 100
 py scripts/taste_pipeline.py build-profile --person you
 py scripts/taste_pipeline.py recommend --limit 12
+py scripts/taste_pipeline.py record-liked --title "Example Film" --year 2024
 ```
 
 The local database defaults to `%LOCALAPPDATA%\\Codex\\letterboxd-recommender\\taste.sqlite`.
