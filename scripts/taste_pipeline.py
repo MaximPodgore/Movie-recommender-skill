@@ -106,12 +106,12 @@ def build_profile(args: argparse.Namespace) -> None:
     con = db(); migrate_legacy(con); weights, evidence = defaultdict(float), defaultdict(int)
     rows = con.execute("SELECT e.kind,e.rating,ff.feature_type,ff.feature_value FROM taste_events e JOIN film_features ff USING(film_key) WHERE e.person=?", (args.person,))
     for row in rows:
-        weight = (float(row["rating"]) - 2.5) if row["kind"] == "rated" and row["rating"] is not None else (1.5 if row["kind"] == "liked" else (.08 if row["kind"] == "watchlist" else (.04 if row["kind"] == "watched" else 0)))
+        weight = (float(row["rating"]) - 2.5) if row["kind"] == "rated" and row["rating"] is not None else (1.5 if row["kind"] == "liked" else (.04 if row["kind"] == "watchlist" else (.08 if row["kind"] == "watched" else 0)))
         weights[(row["feature_type"], row["feature_value"])] += weight; evidence[(row["feature_type"], row["feature_value"])] += 1
     positive = sorted(({"type":t,"value":v,"weight":round(w,2),"films":evidence[(t,v)]} for (t,v),w in weights.items() if w > 0), key=lambda x:(-x["weight"],-x["films"]))[:40]
     negative = sorted(({"type":t,"value":v,"weight":round(w,2),"films":evidence[(t,v)]} for (t,v),w in weights.items() if w < 0), key=lambda x:x["weight"])[:25]
     movements = [x["value"] for x in positive if x["type"] == "movement"]; adjacent = sorted({item for movement in movements for item in ADJACENCIES.get(movement, [])})
-    profile = {"person":args.person,"method":"structured metadata affinity; not embedding similarity","signal_weights":{"rated":"rating minus 2.5 (primary)","liked":1.5,"watchlist":0.08,"watched":0.04},"top_affinities":positive,"negative_affinities":negative,"adjacent_unexplored_buckets":adjacent,"metadata_coverage":con.execute("SELECT count(*) FROM film_metadata").fetchone()[0]}
+    profile = {"person":args.person,"method":"structured metadata affinity; not embedding similarity","signal_weights":{"rated":"rating minus 2.5 (primary)","liked":1.5,"watchlist":0.04,"watched":0.08},"top_affinities":positive,"negative_affinities":negative,"adjacent_unexplored_buckets":adjacent,"metadata_coverage":con.execute("SELECT count(*) FROM film_metadata").fetchone()[0]}
     con.execute("INSERT OR REPLACE INTO taste_profiles VALUES (?,?,?)", (args.person,json.dumps(profile),now())); con.commit(); con.close(); print(json.dumps(profile,indent=2))
 
 def recommend(args: argparse.Namespace) -> None:
